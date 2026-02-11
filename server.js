@@ -1,0 +1,107 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const mongoose = require('mongoose');
+const cors = require('cors');
+
+const User = require('./models/User');
+
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+
+// MongoDB
+mongoose.connect('mongodb://127.0.0.1:27017/chatapp')
+    .then(() => console.log('MongoDB Connected'))
+    .catch(err => console.error(err));
+
+// Test route
+app.get('/', (req, res) => {
+    res.send('Chat Server Running');
+});
+
+/**
+ * SIGNUP
+ * POST /api/signup
+ * body: { username, firstname, lastname, password }
+ */
+app.post('/api/signup', async (req, res) => {
+    try {
+        const { username, firstname, lastname, password } = req.body;
+
+        if (!username || !firstname || !lastname || !password) {
+            return res.status(400).json({ message: 'All fields are required' });
+        }
+
+        const existing = await User.findOne({ username: username.trim() });
+        if (existing) {
+            return res.status(409).json({ message: 'Username already exists' });
+        }
+
+        const now = new Date();
+        const timestamp = now.toLocaleString();
+
+        const newUser = await User.create({
+            username: username.trim(),
+            firstname: firstname.trim(),
+            lastname: lastname.trim(),
+            password,
+            createon: timestamp
+        });
+
+
+        return res.status(201).json({
+            message: 'Signup successful',
+            user: { username: newUser.username, firstname: newUser.firstname, lastname: newUser.lastname }
+        });
+    } catch (err) {
+        return res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
+/**
+ * LOGIN
+ * POST /api/login
+ * body: { username, password }
+ */
+app.post('/api/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        if (!username || !password) {
+            return res.status(400).json({ message: 'Username and password are required' });
+        }
+
+        const user = await User.findOne({ username: username.trim() });
+        if (!user) {
+            return res.status(401).json({ message: 'Invalid username or password' });
+        }
+
+        if (user.password !== password) {
+            return res.status(401).json({ message: 'Invalid username or password' });
+        }
+
+        return res.json({
+            message: 'Login successful',
+            user: { username: user.username, firstname: user.firstname, lastname: user.lastname }
+        });
+    } catch (err) {
+        return res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
+// Socket connection (keep for later)
+io.on('connection', (socket) => {
+    console.log('User Connected');
+
+    socket.on('disconnect', () => {
+        console.log('User Disconnected');
+    });
+});
+
+server.listen(3000, () => {
+    console.log('Server running on port 3000');
+});
