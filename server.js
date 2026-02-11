@@ -7,6 +7,8 @@ const cors = require('cors');
 
 const User = require('./models/User');
 const GroupMessage = require('./models/GroupMessage');
+const PrivateMessage = require('./models/PrivateMessage');
+
 
 const app = express();
 app.use(express.json());
@@ -104,6 +106,12 @@ app.post('/api/login', async (req, res) => {
 io.on('connection', (socket) => {
     console.log('User Connected');
 
+    socket.on('register_user', (username) => {
+        socket.join(username);
+        console.log(`User registered for private chat: ${username}`);
+    });
+
+
     socket.on('join_room', (room) => {
         socket.join(room);
         console.log(`User joined room: ${room}`);
@@ -129,6 +137,33 @@ io.on('connection', (socket) => {
             console.log('GroupMessage save error:', err.message);
         }
     });
+
+    socket.on('private_message', async (data) => {
+        try {
+            await PrivateMessage.create({
+                from_user: data.from_user,
+                to_user: data.to_user,
+                message: data.message,
+                date_sent: new Date().toLocaleString()
+            });
+
+
+            io.to(data.to_user).emit('private_message', data);
+            socket.emit('private_message', data);
+        } catch (err) {
+            console.log('PrivateMessage save error:', err.message);
+        }
+    });
+
+    socket.on('typing_private', (data) => {
+        io.to(data.to_user).emit('typing_private', data);
+    });
+
+    socket.on('stop_typing_private', (data) => {
+        io.to(data.to_user).emit('stop_typing_private', data);
+    });
+
+
 
     socket.on('disconnect', () => {
         console.log('User Disconnected');
